@@ -25,7 +25,6 @@ import (
 	"github.com/cilium/cilium/daemon/cmd/cni"
 	agentK8s "github.com/cilium/cilium/daemon/k8s"
 	"github.com/cilium/cilium/pkg/auth"
-	"github.com/cilium/cilium/pkg/bandwidth"
 	"github.com/cilium/cilium/pkg/bgp/speaker"
 	bgpv1 "github.com/cilium/cilium/pkg/bgpv1/agent"
 	"github.com/cilium/cilium/pkg/bpf"
@@ -35,6 +34,7 @@ import (
 	"github.com/cilium/cilium/pkg/controller"
 	"github.com/cilium/cilium/pkg/datapath/link"
 	linuxdatapath "github.com/cilium/cilium/pkg/datapath/linux"
+	"github.com/cilium/cilium/pkg/datapath/linux/bandwidth"
 	"github.com/cilium/cilium/pkg/datapath/linux/bigtcp"
 	"github.com/cilium/cilium/pkg/datapath/linux/ipsec"
 	"github.com/cilium/cilium/pkg/datapath/linux/probes"
@@ -217,8 +217,11 @@ type Daemon struct {
 
 	// read-only map of all the hive settings
 	settings cellSettings
+
 	// enable modules health support
 	healthProvider cell.Health
+
+	bwManager bandwidth.Manager
 }
 
 func (d *Daemon) initDNSProxyContext(size int) {
@@ -275,8 +278,6 @@ func (d *Daemon) init() error {
 	}
 
 	if !option.Config.DryMode {
-		bandwidth.InitBandwidthManager()
-
 		if err := d.Datapath().Loader().Reinitialize(d.ctx, d, d.mtuConfig.GetDeviceMTU(), d.Datapath(), d.l7Proxy); err != nil {
 			return fmt.Errorf("failed while reinitializing datapath: %w", err)
 		}
@@ -512,6 +513,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		settings:             params.Settings,
 		healthProvider:       params.HealthProvider,
 		bigTCPConfig:         params.BigTCPConfig,
+		bwManager:            params.BandwidthManager,
 	}
 
 	d.configModifyQueue = eventqueue.NewEventQueueBuffered("config-modify-queue", ConfigModifyQueueSize)
@@ -621,6 +623,7 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 		d.cgroupManager,
 		params.Resources,
 		params.ServiceCache,
+		d.bwManager,
 	)
 	nd.RegisterK8sGetters(d.k8sWatcher)
 
@@ -856,11 +859,6 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 
 		params.NodeManager.Subscribe(params.WGAgent)
 	}
-
-	// Perform an early probe on the underlying kernel on whether BandwidthManager
-	// can be supported or not. This needs to be done before handleNativeDevices()
-	// as BandwidthManager needs these to be available for setup.
-	bandwidth.ProbeBandwidthManager()
 
 	// The kube-proxy replacement and host-fw devices detection should happen after
 	// establishing a connection to kube-apiserver, but before starting a k8s watcher.
