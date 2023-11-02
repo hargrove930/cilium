@@ -52,6 +52,7 @@ type MapState interface {
 	Get(Key) (MapStateEntry, bool)
 	Insert(Key, MapStateEntry)
 	Delete(Key)
+	DeleteAll()
 	InsertIfNotExists(Key, MapStateEntry) bool
 	// ForEach allows iteration over the MapStateEntries. It returns true iff
 	// the iteration was not stopped early by the callback.
@@ -292,6 +293,12 @@ func (ms *mapState) Insert(k Key, v MapStateEntry) {
 func (ms *mapState) Delete(k Key) {
 	delete(ms.allows, k)
 	delete(ms.denies, k)
+}
+
+// Delete removes all entries from the mapState
+func (ms *mapState) DeleteAll() {
+	ms.allows = make(map[Key]MapStateEntry)
+	ms.denies = make(map[Key]MapStateEntry)
 }
 
 // ForEach iterates over every Key MapStateEntry and stops when the function
