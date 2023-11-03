@@ -1030,15 +1030,12 @@ func (l4 *L4Filter) matchesLabels(labels labels.LabelArray) (bool, bool) {
 // addL4Filter adds 'filterToMerge' into the 'resMap'. Returns an error if it
 // the 'filterToMerge' can't be merged with an existing filter for the same
 // port and proto.
-// TODO: Port ranges are split whenever the new filter's range partially overlaps
-// with an existing filter => Filters in al L4PolicyMap never have overlapping port ranges!
 func addL4Filter(policyCtx PolicyContext,
 	ctx *SearchContext, resMap L4PolicyMap,
 	p api.PortProtocol, proto api.L4Proto,
 	filterToMerge *L4Filter,
 	ruleLabels labels.LabelArray) error {
 
-	// TODO: Consider if keying by the start port is fine if port ranges can't overlap?
 	key := p.Port + "/" + string(proto)
 	existingFilter, ok := resMap[key]
 	if !ok {
